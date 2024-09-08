@@ -69,7 +69,7 @@ team_t team = {
 
 // 다음과 이전 블록의 블록 포인터를 각각 리턴
 #define NEXT_BLKP(bp)   ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))   // (다음 블록 포인터) = (현재 블록 포인터) + (현재 블록 사이즈)
-#define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE(((char *)(bp) - DESIZE)))  // (이전 블록 포인터) = (현재 블록 포인터) - (이전 블록 사이즈)
+#define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))  // (이전 블록 포인터) = (현재 블록 포인터) - (이전 블록 사이즈)
 
 // Private global variables
 static char *mem_heap;
