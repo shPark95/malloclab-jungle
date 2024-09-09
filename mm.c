@@ -181,33 +181,33 @@ int mm_init(void)
     return 0;
 }
 
-/*
- * mem_init - Initialize the memory system model
-*/
-void mem_init(void)
-{
-    mem_heap = (char *)Malloc(MAX_HEAP);
-    mem_brk = (char *)mem_heap;
-    mem_max_addr = (char *)(mem_heap + MAX_HEAP);
-}
+// /*
+//  * mem_init - Initialize the memory system model
+// */
+// void mem_init(void)
+// {
+//     mem_heap = (char *)Malloc(MAX_HEAP);
+//     mem_brk = (char *)mem_heap;
+//     mem_max_addr = (char *)(mem_heap + MAX_HEAP);
+// }
 
-/*
- * mem_sbrk - Simple model of the sbrk function. Extends the heap
- *     by incr bytes and returns the start address of the new area. In
- *     this model, the heap cannot be shrunk
-*/
-void *mem_sbrk(int incr)
-{
-    char *old_brk = mem_brk;
+// /*
+//  * mem_sbrk - Simple model of the sbrk function. Extends the heap
+//  *     by incr bytes and returns the start address of the new area. In
+//  *     this model, the heap cannot be shrunk
+// */
+// void *mem_sbrk(int incr)
+// {
+//     char *old_brk = mem_brk;
 
-    if ((incr < 0) || ((mem_brk + incr) > mem_max_addr)) {
-        errno = ENOMEM;
-        fprintf(stderr, "ERROR: mem_sbrk failed. Ran out of memory...\n");
-        return (void *)-1;
-    }
-    mem_brk += incr;
-    return (void *)old_brk;
-}
+//     if ((incr < 0) || ((mem_brk + incr) > mem_max_addr)) {
+//         errno = ENOMEM;
+//         fprintf(stderr, "ERROR: mem_sbrk failed. Ran out of memory...\n");
+//         return (void *)-1;
+//     }
+//     mem_brk += incr;
+//     return (void *)old_brk;
+// }
 
 /* 
  * mm_malloc - Allocate a block by incrementing the brk pointer.
@@ -259,8 +259,8 @@ void mm_free(void *bp)
 {
     size_t size = GET_SIZE(HDRP(bp));
 
-    PUT(HDRP(bp, PACK(size, 0)));
-    PUT(FTRP(bp, PACK(size, 0)));
+    PUT(HDRP(bp), PACK(size, 0));
+    PUT(FTRP(bp), PACK(size, 0));
     coalesce(bp);
 }
 
@@ -285,48 +285,48 @@ void *mm_realloc(void *ptr, size_t size)
 }
 
 
-int mm_check(void) {
-    char *bp = heap_listp;
+// int mm_check(void) {
+//     char *bp = heap_listp;
 
-    // 프롤로그 검사
-    if (GET_SIZE(HDRP(bp)) != DSIZE || !GET_ALLOC(HDRP(bp))) {
-        printf("Error: bad prologue header\n");
-        return 0;
-    }
+//     // 프롤로그 검사
+//     if (GET_SIZE(HDRP(bp)) != DSIZE || !GET_ALLOC(HDRP(bp))) {
+//         printf("Error: bad prologue header\n");
+//         return 0;
+//     }
 
-    // 힙의 모든 블록을 순회하며 검사
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        // 각 블록의 헤더와 푸터가 일치하는지 확인
-        if (GET(HDRP(bp)) != GET(FTRP(bp))) {
-            printf("Error: header does not match footer\n");
-            return 0;
-        }
+//     // 힙의 모든 블록을 순회하며 검사
+//     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+//         // 각 블록의 헤더와 푸터가 일치하는지 확인
+//         if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+//             printf("Error: header does not match footer\n");
+//             return 0;
+//         }
         
-        // 블록이 더블 워드 정렬이 되어 있는지 확인
-        if ((size_t)bp % ALIGNMENT != 0) {
-            printf("Error: block is not aligned\n");
-            return 0;
-        }
+//         // 블록이 더블 워드 정렬이 되어 있는지 확인
+//         if ((size_t)bp % ALIGNMENT != 0) {
+//             printf("Error: block is not aligned\n");
+//             return 0;
+//         }
 
-        // 추가적인 검사 (예: 프리 블록이 프리 리스트에 올바르게 있는지)
-        if (!GET_ALLOC(HDRP(bp)) && !in_free_list(bp)) {
-            printf("Error: free block is not in free list\n");
-            return 0;
-        }
-    }
+//         // 추가적인 검사 (예: 프리 블록이 프리 리스트에 올바르게 있는지)
+//         if (!GET_ALLOC(HDRP(bp)) && !in_free_list(bp)) {
+//             printf("Error: free block is not in free list\n");
+//             return 0;
+//         }
+//     }
 
-    // 에필로그 검사
-    if (GET_SIZE(HDRP(bp)) != 0 || !GET_ALLOC(HDRP(bp))) {
-        printf("Error: bad epilogue header\n");
-        return 0;
-    }
+//     // 에필로그 검사
+//     if (GET_SIZE(HDRP(bp)) != 0 || !GET_ALLOC(HDRP(bp))) {
+//         printf("Error: bad epilogue header\n");
+//         return 0;
+//     }
 
-    // 프리 리스트 검사
-    if (!check_free_list()) {
-        printf("Error: free list is inconsistent\n");
-        return 0;
-    }
+//     // 프리 리스트 검사
+//     if (!check_free_list()) {
+//         printf("Error: free list is inconsistent\n");
+//         return 0;
+//     }
 
-    return 1; // 정상일 경우
-}
+//     return 1; // 정상일 경우
+// }
 
