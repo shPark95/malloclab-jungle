@@ -14,10 +14,10 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 
 #include "mm.h"
 #include "memlib.h"
-
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
@@ -42,6 +42,7 @@ team_t team = {
 #define WSIZE 4
 #define DSIZE 8
 #define CHUNKSIZE (1 << 12)
+#define CLASSSIZE (8) 
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 
@@ -68,36 +69,62 @@ static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
-static void *heap_listp;
-
-// 추가된 함수
-static void putFreeBlock(void *bp);
+static void putFreeBlock(void *bp, size_t size);
 static void removeBlock(void *bp);
-static char *free_listp;
+static int get_class_idx(size_t size);
+static char **get_class(int idx);
+static char *prologue_bp;
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-static void putFreeBlock(void *bp)
+// 해당 size에 맞는 클래스 인덱스 찾기
+static int get_class_idx(size_t size)
 {
-    SUCC(bp) = free_listp;                // 가용리스트 첫번째 값 바꿈
-    PRED(free_listp) = bp;                // free_listp의 이전블록 가리키는 값 바꿔줌
-    PRED(bp) = NULL;                      // bp의 이전블록 가리키는 값 NULL로 수정
-    free_listp = bp;                      // free_listp 가리키는값 수정
+    if (size == 0) {
+        return -1;
+    }
+    size >>= 5;     // 32bit 위치부터 찾기 (블록의 최소 크기가 32bit)
+    for (int i=0; i<CLASSSIZE; i++) {
+        size >>= 1;
+        if (size == 0) {
+            return i;
+        }
+    }
+    return CLASSSIZE-1;
+}
+
+// 해당 클래스 인덱스에 맞는 클래스 찾기
+static char **get_class(int idx)
+{
+    return (char **)(prologue_bp + idx * WSIZE);
+}
+
+static void putFreeBlock(void *bp, size_t size)
+{
+    char **free_listp;
+
+    free_listp = get_class(get_class_idx(size));
+    SUCC(bp) = *free_listp;
+    PRED(bp) = NULL;
+    if (*free_listp != NULL) {
+        PRED(*free_listp) = bp;
+    }
+    *free_listp = bp;
 }
 
 static void removeBlock(void *bp)
 {
-    if (PRED(bp) == NULL) {
-        free_listp = SUCC(bp);
-        PRED(SUCC(bp)) = PRED(bp);        // 다음블록의 succesoor의 predecesor를 이전블록의 predecesor로 설정
-        PRED(bp) = NULL;
+    if (PRED(bp)) {     // 이전 블록이 있는 경우
+        SUCC(PRED(bp)) = SUCC(bp);
+    } else {            // 이전 블록이 없으면 free_listp를 업데이트
+        char **free_listp = get_class(get_class_idx(GET_SIZE(HDRP(bp))));
+        *free_listp = SUCC(bp);
     }
-    else {
-        PRED(SUCC(bp)) = PRED(bp);        // 다음블록의 succesoor의 predecesor를 이전블록의 predecesor로 설정
-        SUCC(PRED(bp)) = SUCC(bp);        // 이전블록의 predecesor의 successor를 다음븥록의 successor로 설정
-        SUCC(bp) = NULL;
-        PRED(bp) = NULL;
+    if (SUCC(bp)) {     // 다음 블록이 있는 경우
+        PRED(SUCC(bp)) = PRED(bp);
     }
+    SUCC(bp) = NULL;
+    PRED(bp) = NULL;
 }
 
 static void *coalesce(void *bp)
@@ -134,7 +161,7 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    putFreeBlock(bp);
+    putFreeBlock(bp, size);
 
     return bp;
 }
@@ -163,25 +190,31 @@ static void *extend_heap(size_t words)
 
 static void *find_fit(size_t asize)
 {
-    /* First-fit search */
-    void *bp;
-
-    for (bp = free_listp; !GET_ALLOC(HDRP(bp)); bp = SUCC(bp)) {
-        if (asize <= (size_t)GET_SIZE(HDRP(bp))) {
-            return bp;
+    char *min_bp = NULL;
+    size_t min_size = ULONG_MAX;
+    for (int i = get_class_idx(asize); i<CLASSSIZE; i++) {
+        if (min_size != ULONG_MAX) {
+            return min_bp;
+        }
+        char **free_listp = get_class(i);
+        for (char *bp = *free_listp; bp != NULL; bp = SUCC(bp)) {
+            if (asize <= GET_SIZE(HDRP(bp)) && GET_SIZE(HDRP(bp)) < min_size) {
+                min_size = GET_SIZE(HDRP(bp));
+                min_bp = bp;
+            }
         }
     }
-    return NULL;    /* No fit */
+    return min_bp;
 }
 
 static void place(void *bp, size_t asize)
 {
+    removeBlock(bp);
     size_t csize = GET_SIZE(HDRP(bp));
 
     if ((csize - asize) >= (2*DSIZE)) {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
-        removeBlock(bp);
 
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
@@ -191,7 +224,6 @@ static void place(void *bp, size_t asize)
     else {
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
-        removeBlock(bp);
     }
 }
 
@@ -200,15 +232,18 @@ static void place(void *bp, size_t asize)
  */
 int mm_init(void)
 {
-    if ((heap_listp = mem_sbrk(6*WSIZE)) == (void *)-1)
+    if ((prologue_bp = mem_sbrk((CLASSSIZE+4)*WSIZE)) == (void *)-1) {
         return -1;
-    PUT(heap_listp, 0);
-    PUT(heap_listp + (1 * WSIZE), PACK(2 * DSIZE, 1));
-    PUT(heap_listp + (2 * WSIZE), NULL);
-    PUT(heap_listp + (3 * WSIZE), NULL);
-    PUT(heap_listp + (4 * WSIZE), PACK(2 * DSIZE, 1));
-    PUT(heap_listp + (5 * WSIZE), PACK(0, 1));
-    free_listp = heap_listp = heap_listp + DSIZE;
+    }
+    PUT(prologue_bp + 0*WSIZE, PACK(0, 0));                                 // 미사용 패딩
+    PUT(prologue_bp + 1*WSIZE, PACK((CLASSSIZE+2)*WSIZE, 1));               // 프롤로그 헤더
+    for (int i=2; i<CLASSSIZE+2; i++) {                                     // 블록 분할 관리 클래스
+        PUT(prologue_bp + i*WSIZE, NULL);
+    }
+    PUT(prologue_bp + (CLASSSIZE+2)*WSIZE, PACK((CLASSSIZE+2)*WSIZE, 1));   // 프롤로그 풋터
+    PUT(prologue_bp + (CLASSSIZE+3)*WSIZE, PACK(0, 1));                     // 에필로그 헤더
+    prologue_bp += DSIZE;
+
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
     return 0;
